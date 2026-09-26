@@ -1,62 +1,106 @@
 <div align="center">
 
-# TP-Link Easy Smart IPv4 Discovery Fix
+# 🔧 TP-Link Easy Smart IPv4 Discovery Fix
 
-### Fix switch discovery when the TP-Link Easy Smart Configuration Utility cannot find your switch
+### Fix TP-Link Easy Smart Switch discovery problems on Linux/Wine and troubleshoot Windows
 
-[![Platform](https://img.shields.io/badge/Linux-Wine-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://www.winehq.org/)
+<br>
+
+[![Linux](https://img.shields.io/badge/Linux-Wine-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://www.winehq.org/)
 [![Windows](https://img.shields.io/badge/Windows-Supported-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://www.microsoft.com/windows)
-[![Protocol](https://img.shields.io/badge/Discovery-UDP%20Broadcast-6f42c1?style=for-the-badge)](#how-discovery-works)
-[![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](#license)
+[![Protocol](https://img.shields.io/badge/Discovery-UDP%20Broadcast-6f42c1?style=for-the-badge)](#-how-discovery-works)
+[![License](https://img.shields.io/badge/License-MIT-2ea44f?style=for-the-badge)](#license)
 
-**Your switch can be reachable by IP and still be invisible to the TP-Link configuration utility.**
+<br>
 
-This repository documents an IPv4 discovery workaround and troubleshooting procedure for the **TP-Link Easy Smart Configuration Utility**, with a particular focus on Linux/Wine environments.
+**Your TP-Link Easy Smart Switch can be fully reachable — yet completely invisible to the configuration utility.**
+
+This repository documents a reproducible **IPv4 discovery workaround** for the TP-Link Easy Smart Configuration Utility, with a particular focus on **Linux/Wine** environments.
 
 </div>
 
 ---
 
-## ⚡ TL;DR
+## 🚀 Quick Fix
 
-If you are running the TP-Link Easy Smart Configuration Utility under **Linux/Wine** and your switch is not detected, try forcing the bundled Java runtime to use IPv4:
+> **Linux/Wine users:** If your switch is not detected, try forcing the bundled Java runtime to use IPv4.
+
+Add:
 
 ```text
 -Djava.net.preferIPv4Stack=true
 ````
 
-Example:
+### One-command launch
 
 ```bash
-wine "$HOME/.wine/drive_c/Program Files (x86)/TPLINK/EasySmartConfigurationUtility/jre/bin/javaw.exe" \
--Djava.net.preferIPv4Stack=true \
--Xmx300m \
--jar "C:/Program Files (x86)/TPLINK/EasySmartConfigurationUtility/Easy Smart Configuration Utility.exe"
+wine "$HOME/.wine/drive_c/Program Files (x86)/TPLINK/EasySmartConfigurationUtility/jre/bin/javaw.exe" -Djava.net.preferIPv4Stack=true -Xmx300m -jar "C:/Program Files (x86)/TPLINK/EasySmartConfigurationUtility/Easy Smart Configuration Utility.exe"
 ```
 
-The important part is:
+<details>
+<summary>💡 Why does this work?</summary>
+
+The TP-Link utility uses **UDP broadcast** to discover Easy Smart switches.
+
+Under Wine, the bundled Java runtime can create an IPv6 socket using an IPv4-mapped address.
+
+For example:
+
+```text
+::ffff:192.168.x.x
+```
+
+In the affected configuration:
+
+```text
+Switch
+   │
+   │ UDP response
+   ▼
+Linux network stack
+   │
+   │ response arrives
+   ▼
+Java / Wine socket
+   │
+   │ ❌ response not delivered correctly
+   ▼
+TP-Link Utility
+```
+
+Forcing Java to use the IPv4 stack changes the socket behavior:
+
+```text
+Switch
+   │
+   │ IPv4 UDP response
+   ▼
+Linux network stack
+   │
+   ▼
+IPv4 Java socket
+   │
+   ▼
+TP-Link Utility
+   │
+   └── ✅ Switch discovered
+```
+
+The workaround is:
 
 ```text
 -Djava.net.preferIPv4Stack=true
 ```
 
-### Why?
-
-The utility uses **UDP broadcast** for device discovery.
-
-Under Wine, the bundled Java runtime can use an IPv6 socket with an IPv4-mapped address. In the affected configuration, the switch's response can reach the Linux host while Java/Wine does not deliver the IPv4 broadcast response to the application.
-
-Forcing Java to use the IPv4 stack resolves this specific discovery problem.
+</details>
 
 ---
 
 # 📡 How Discovery Works
 
-The Easy Smart Configuration Utility does **not** simply scan TCP port 80 to find switches.
+The Easy Smart Configuration Utility does **not** simply scan TCP port `80` to find switches.
 
 It uses a separate UDP discovery mechanism.
-
-A simplified representation is:
 
 ```text
 ┌──────────────────────┐
@@ -69,7 +113,7 @@ A simplified representation is:
            │ 29809 → 29808
            ▼
 ┌──────────────────────┐
-│     Ethernet / LAN   │
+│      LAN / Ethernet  │
 │    255.255.255.255   │
 └──────────┬───────────┘
            │
@@ -82,71 +126,77 @@ A simplified representation is:
 └──────────────────────┘
 ```
 
-This means these two things are independent:
+### This is why you can see:
 
-```text
-HTTP management       → works
-UDP discovery         → fails
-```
+| Test                 | Result  |
+| -------------------- | ------- |
+| Ping switch          | ✅ Works |
+| Open web interface   | ✅ Works |
+| Access TCP/80        | ✅ Works |
+| Easy Smart discovery | ❌ Fails |
 
-So you can have:
-
-```text
-ping 192.168.x.x              ✅
-http://192.168.x.x             ✅
-TP-Link Utility discovery     ❌
-```
-
-and the switch itself can still be completely operational.
+The switch does **not** necessarily have a connectivity problem.
 
 ---
 
 # 🐧 Linux / Wine
 
-## Recommended Fix
+## ✅ Recommended Fix
 
-Launch the TP-Link utility using:
+Use:
 
 ```text
 -Djava.net.preferIPv4Stack=true
 ```
 
-### One-Command Launcher
+The option must be supplied **before `-jar`**.
+
+### Permanent launcher
+
+Run:
 
 ```bash
 mkdir -p ~/.local/bin && printf '%s\n' '#!/bin/bash' 'exec wine "$HOME/.wine/drive_c/Program Files (x86)/TPLINK/EasySmartConfigurationUtility/jre/bin/javaw.exe" -Djava.net.preferIPv4Stack=true -Xmx300m -jar "C:/Program Files (x86)/TPLINK/EasySmartConfigurationUtility/Easy Smart Configuration Utility.exe"' > ~/.local/bin/tplink-easy-smart && chmod +x ~/.local/bin/tplink-easy-smart
 ```
 
-Then run:
+Then simply run:
 
 ```bash
 ~/.local/bin/tplink-easy-smart
 ```
 
-You can also create a desktop launcher pointing to this script.
+<details>
+<summary>🧠 What exactly does this change?</summary>
 
-### What This Changes
-
-The workaround only changes the Java application's socket preference.
+Only the Java application's networking behavior.
 
 It does **not**:
 
 * disable IPv6 system-wide
-* modify the switch
-* modify the router
+* modify Linux networking
+* modify your router
+* modify your switch
 * change the switch IP
-* change VLAN configuration
+* modify VLAN configuration
 * modify the TP-Link executable
-* require removing virtual network interfaces
+* remove virtual interfaces
 * require disabling your firewall
+
+It simply tells Java:
+
+```text
+Prefer IPv4 sockets instead of the IPv6 networking stack.
+```
+
+</details>
 
 ---
 
 # 🪟 Windows
 
-Windows users should first determine whether the problem is actually network discovery rather than basic connectivity.
+Windows users should first determine whether the problem is basic connectivity or discovery.
 
-## 1. Test Connectivity
+## 1. Test the switch
 
 Open Command Prompt:
 
@@ -154,35 +204,17 @@ Open Command Prompt:
 ping 192.168.x.x
 ```
 
-Replace `192.168.x.x` with your switch's IP address.
-
 Then open:
 
 ```text
 http://192.168.x.x
 ```
 
-If the web interface works but the Easy Smart Configuration Utility does not detect the switch, continue below.
+If both work but the TP-Link utility cannot find the switch, continue below.
 
 ---
 
 ## 2. Check Network Adapters
-
-Windows systems may have multiple network interfaces:
-
-* Ethernet
-* Wi-Fi
-* VPN adapters
-* Hyper-V
-* VMware
-* VirtualBox
-* WSL
-* Docker
-* Tailscale
-* ZeroTier
-* Other virtual adapters
-
-The TP-Link utility may select an unexpected interface for discovery.
 
 Press:
 
@@ -196,52 +228,93 @@ and run:
 ncpa.cpl
 ```
 
-Temporarily disable unused VPN or virtual adapters and leave the physical adapter connected to the switch enabled.
+Look for unused adapters such as:
 
-Restart the TP-Link utility and scan again.
+* VPN
+* Hyper-V
+* VMware
+* VirtualBox
+* WSL
+* Docker
+* Tailscale
+* ZeroTier
+* Other virtual adapters
+
+Temporarily disable unused adapters for testing.
+
+Then restart the TP-Link utility.
+
+<details>
+<summary>🔍 Why can virtual adapters matter?</summary>
+
+The utility has to choose a network interface for its UDP discovery broadcast.
+
+A PC may have:
+
+```text
+Ethernet       → 192.168.x.x
+Wi-Fi           → 192.168.x.x
+Hyper-V         → 172.x.x.x
+VMware          → 192.168.x.x
+VPN             → 10.x.x.x
+WSL             → virtual
+```
+
+The switch may be reachable through Ethernet while the utility attempts discovery through another interface.
+
+</details>
 
 ---
 
-## 3. Check Windows Firewall
+## 3. Windows Firewall
 
-The discovery process uses UDP broadcast.
+The discovery protocol uses UDP broadcast.
 
-Make sure Windows Firewall or third-party security software is not blocking the TP-Link utility.
+Therefore:
 
-Do **not** immediately disable the entire firewall.
+```text
+HTTP / TCP 80       → may work
+Ping / ICMP         → may work
+UDP discovery       → may be blocked
+```
 
-Instead, check whether the TP-Link utility is permitted to communicate on your local/private network.
+Check Windows Firewall and third-party security software.
+
+**Do not disable your entire firewall as the first troubleshooting step.**
 
 ---
 
 ## 4. Java IPv4 Option
 
-If your particular TP-Link utility installation allows Java startup parameters to be modified, you can test:
+If your TP-Link utility installation allows Java startup parameters to be modified, test:
 
 ```text
 -Djava.net.preferIPv4Stack=true
 ```
 
-However, the IPv6-mapped IPv4 socket problem documented in this repository was specifically reproduced with the TP-Link application under **Wine**.
+However:
 
-Therefore, Windows users should also investigate:
+> The IPv6-mapped IPv4 socket issue documented in this repository was specifically reproduced under **Wine**.
+
+For Windows, also investigate:
 
 * network adapter selection
-* firewall rules
 * VPN software
 * virtual adapters
+* firewall rules
 * security software
-* multiple active network interfaces
-
-before assuming Java is the cause.
+* multiple active interfaces
 
 ---
 
-# 🔬 Technical Details
+# 🔬 Technical Investigation
+
+<details>
+<summary>Click to expand the technical details</summary>
 
 The TP-Link Easy Smart Configuration Utility is a Java-based application bundled with its own Java runtime.
 
-The relevant networking behavior involves Java networking classes such as:
+Relevant Java networking classes include:
 
 ```text
 java.net.DatagramSocket
@@ -251,76 +324,82 @@ java.net.NetworkInterface
 java.net.InetSocketAddress
 ```
 
-The discovery process uses UDP broadcast.
+The discovery process uses UDP.
 
-In the affected Wine configuration, Java can create an IPv6 socket and bind it to an IPv4-mapped address similar to:
+In the affected Wine configuration, Java created an IPv6 socket and bound it to an IPv4-mapped address similar to:
 
 ```text
 ::ffff:192.168.x.x
 ```
 
-The switch can still respond to the UDP broadcast.
+The switch still responded to the broadcast.
 
-The important distinction is:
+The network capture therefore showed:
 
 ```text
-Network level:
-
 PC ───── UDP discovery ─────> Switch
 PC <──── UDP response ─────── Switch
-                         ✅
 ```
 
-while the application can experience:
+while the Java application did not receive the response correctly.
 
-```text
-Application level:
+A normal IPv4 Java `DatagramSocket` could receive the traffic.
 
-Java/Wine receives response
-                         ❌
-```
-
-Using:
+Launching the TP-Link utility with:
 
 ```text
 -Djava.net.preferIPv4Stack=true
 ```
 
-causes Java to use an IPv4 socket instead.
+caused the utility to discover the switch immediately.
 
-Result:
+### Result
 
 ```text
-PC ───── IPv4 UDP broadcast ─────> Switch
-PC <──── IPv4 UDP response ─────── Switch
-                         ✅
+IPv6-mapped socket
+        │
+        ▼
+   Wine / Java
+        │
+        X
+        │
+        ▼
+   No discovery
 
-Java receives response
-                         ✅
 
-Utility discovers switch
-                         ✅
+IPv4 socket
+        │
+        ▼
+   Wine / Java
+        │
+        ▼
+   Discovery
+        │
+        ▼
+   Switch found
 ```
+
+</details>
 
 ---
 
-# 🧪 Verify Discovery Traffic on Linux
+# 🧪 Linux Diagnostic
 
-If the utility still cannot find your switch, monitor the network traffic.
+If the switch still cannot be discovered, monitor the UDP traffic.
 
-First determine your LAN interface:
+First find your physical LAN interface:
 
 ```bash
 ip route
 ```
 
-For example:
+Example:
 
 ```text
 default via 192.168.x.1 dev eno1
 ```
 
-Then run:
+Then:
 
 ```bash
 sudo tcpdump -ni eno1 'udp port 29808 or udp port 29809'
@@ -328,37 +407,40 @@ sudo tcpdump -ni eno1 'udp port 29808 or udp port 29809'
 
 Start a scan in the TP-Link utility.
 
-A discovery exchange may look similar to:
+You may see:
 
 ```text
 192.168.x.x.29809 > 255.255.255.255.29808
 192.168.x.x.29808 > 255.255.255.255.29809
 ```
 
-The exact packet contents are proprietary and are not required for basic troubleshooting.
+<details>
+<summary>📊 How to interpret the capture</summary>
 
-### What the Results Mean
+| Result                                     | Possible cause                          |
+| ------------------------------------------ | --------------------------------------- |
+| No outgoing UDP packet                     | Utility/interface problem               |
+| Request but no response                    | Firewall/network/switch discovery issue |
+| Request + response                         | Network discovery works                 |
+| Response visible but utility finds nothing | Application/socket handling issue       |
 
-| tcpdump result                            | Likely situation                        |
-| ----------------------------------------- | --------------------------------------- |
-| No outgoing UDP packet                    | Utility/interface problem               |
-| Outgoing request, no response             | Network/firewall/switch discovery issue |
-| Request + switch response visible         | Network discovery is working            |
-| Response visible but utility sees nothing | Application/socket handling issue       |
+If the switch response is clearly visible in `tcpdump` but the application cannot see it, this is an important clue that the physical/network path is functioning.
+
+</details>
 
 ---
 
 # 🌐 Multiple Network Interfaces
 
-This is especially important on Linux.
+This is particularly important on Linux.
 
-Check:
+Run:
 
 ```bash
 ip addr
 ```
 
-You may see interfaces such as:
+You may see:
 
 ```text
 eno1
@@ -369,33 +451,42 @@ virbr0
 tailscale0
 ```
 
-A Java application may choose an interface you did not expect.
+A Java application may select an unexpected interface.
 
-For example:
+Example:
 
 ```text
                     ┌───────────────┐
-                    │   Linux PC    │
+                    │    Linux PC   │
                     └───────┬───────┘
                             │
           ┌─────────────────┼─────────────────┐
           │                 │                 │
           ▼                 ▼                 ▼
        eno1              lxcbr0            VPN/etc.
-    192.168.x.x         10.x.x.x           virtual
+   192.168.x.x          10.x.x.x           virtual
           │
           │
           ▼
     TP-Link Switch
 ```
 
-The physical LAN interface is the one that should be used for discovery.
+The important interface is the one connected to the same LAN as the switch.
 
-### Important
+<details>
+<summary>⚠️ Don't permanently disable virtual networking</summary>
 
-Do **not** permanently delete or disable virtual interfaces just to make the TP-Link utility work.
+Avoid permanently removing or disabling virtual interfaces simply to make the TP-Link utility work.
 
-Prefer an application-level IPv4 configuration over system-wide networking changes.
+Prefer an application-level workaround such as:
+
+```text
+-Djava.net.preferIPv4Stack=true
+```
+
+over changing the entire system's networking configuration.
+
+</details>
 
 ---
 
@@ -403,11 +494,11 @@ Prefer an application-level IPv4 configuration over system-wide networking chang
 
 Discovery uses UDP broadcast.
 
-Therefore, a firewall can allow:
+A firewall may therefore allow:
 
 ```text
 TCP/80
-ICMP/ping
+ICMP
 ```
 
 while blocking:
@@ -416,23 +507,33 @@ while blocking:
 UDP broadcast
 ```
 
-If HTTP works but discovery does not, check firewall rules.
+## Linux
 
-On Linux with UFW:
+For UFW:
 
 ```bash
 sudo ufw status
 ```
 
-For systems using nftables or firewalld, inspect the appropriate rules.
+For nftables/firewalld, inspect the appropriate rules for your system.
 
-Avoid disabling the entire firewall as a first troubleshooting step.
+## Windows
+
+Check:
+
+* Windows Defender Firewall
+* Third-party antivirus/security software
+* VPN firewall components
+* Network security software
+
+Avoid disabling the entire firewall unless you are deliberately performing a controlled diagnostic test.
 
 ---
 
 # 🛠 Troubleshooting Checklist
 
-## Basic Connectivity
+<details>
+<summary>✅ Basic connectivity</summary>
 
 * [ ] Switch is powered on
 * [ ] PC and switch are on the same LAN/VLAN
@@ -440,38 +541,53 @@ Avoid disabling the entire firewall as a first troubleshooting step.
 * [ ] PC can ping the switch
 * [ ] Switch web interface opens
 
-## Discovery
+</details>
 
-* [ ] TP-Link Easy Smart Configuration Utility is installed
+<details>
+<summary>📡 Discovery</summary>
+
 * [ ] Correct physical network interface is active
 * [ ] No VPN is interfering
-* [ ] No virtual adapter is being selected accidentally
-* [ ] Firewall permits the discovery traffic
-* [ ] UDP broadcast is working
+* [ ] No unexpected virtual adapter is selected
+* [ ] Firewall permits discovery traffic
+* [ ] UDP broadcast works
+* [ ] TP-Link utility is running normally
 
-## Linux / Wine
+</details>
 
-* [ ] Utility runs correctly under Wine
+<details>
+<summary>🐧 Linux / Wine</summary>
+
+* [ ] Wine is working
+* [ ] TP-Link utility starts
 * [ ] Bundled Java runtime is being used
-* [ ] `-Djava.net.preferIPv4Stack=true` is supplied before `-jar`
-* [ ] tcpdump shows the discovery response
-* [ ] Java is no longer using the problematic IPv6-mapped socket
+* [ ] `-Djava.net.preferIPv4Stack=true` is supplied
+* [ ] Option appears before `-jar`
+* [ ] `tcpdump` shows the switch response
+* [ ] Java is using IPv4
 
-## Windows
+</details>
+
+<details>
+<summary>🪟 Windows</summary>
 
 * [ ] Switch responds to ping
-* [ ] Switch web interface is reachable
+* [ ] Web management is reachable
 * [ ] Correct Ethernet/Wi-Fi adapter is active
-* [ ] VPN is disabled for testing
-* [ ] Unused virtual adapters are disabled for testing
-* [ ] Windows Firewall permits the application
-* [ ] Third-party security software is not blocking discovery
+* [ ] VPN disabled for testing
+* [ ] Unused virtual adapters disabled for testing
+* [ ] Windows Firewall checked
+* [ ] Third-party security software checked
+* [ ] Utility restarted after adapter changes
+
+</details>
 
 ---
 
-# 📋 Quick Diagnostic Commands
+# 📋 Useful Commands
 
-## Linux
+<details>
+<summary>🐧 Linux commands</summary>
 
 ### IP configuration
 
@@ -509,7 +625,10 @@ sudo tcpdump -ni eno1 'udp port 29808 or udp port 29809'
 wine "$HOME/.wine/drive_c/Program Files (x86)/TPLINK/EasySmartConfigurationUtility/jre/bin/javaw.exe" -version
 ```
 
-## Windows
+</details>
+
+<details>
+<summary>🪟 Windows commands</summary>
 
 ### Test switch
 
@@ -523,13 +642,15 @@ ping 192.168.x.x
 ncpa.cpl
 ```
 
+</details>
+
 ---
 
-# 💡 Why `preferIPv4Stack` Instead of Disabling IPv6?
+# 💡 Why Not Disable IPv6?
 
-A common troubleshooting suggestion is to disable IPv6 system-wide.
+A common troubleshooting suggestion is to disable IPv6 completely.
 
-That is unnecessary for this problem.
+That is **not necessary** for this workaround.
 
 The Java option:
 
@@ -537,11 +658,36 @@ The Java option:
 -Djava.net.preferIPv4Stack=true
 ```
 
-only affects the Java application's networking behavior.
+only affects the Java application's socket behavior.
 
-It does **not** globally disable IPv6.
+It does not globally disable IPv6.
 
-This makes it a targeted workaround rather than a system-wide networking modification.
+This makes it a much more targeted solution.
+
+---
+
+# 📝 Reproduction Evidence
+
+<details>
+<summary>🔎 Reproduction details</summary>
+
+The Linux/Wine issue was reproduced by observing:
+
+1. The switch was reachable through HTTP.
+2. The switch responded to UDP discovery.
+3. Network capture showed the response arriving at the Linux host.
+4. Java used an IPv6 socket with an IPv4-mapped address.
+5. A normal IPv4 Java `DatagramSocket` could receive the response.
+6. The TP-Link utility failed without the IPv4 option.
+7. The utility discovered the switch immediately after adding:
+
+```text
+-Djava.net.preferIPv4Stack=true
+```
+
+This makes the workaround reproducible for the affected Linux/Wine configuration.
+
+</details>
 
 ---
 
@@ -557,62 +703,40 @@ This repository focuses on:
 * Java networking
 * Windows multi-interface troubleshooting
 
-The exact behavior can vary depending on:
+Behavior can vary depending on:
 
 * TP-Link utility version
-* switch model
-* switch hardware revision
-* switch firmware
+* Switch model
+* Hardware revision
+* Firmware
 * Java version
 * Wine version
 * Linux distribution
 * Windows version
-* firewall configuration
-* network topology
+* Firewall configuration
+* Network topology
 * VLAN configuration
 * VPN/virtual adapters
 
-The workaround should therefore be considered a targeted fix for the affected configuration rather than a universal requirement for every TP-Link switch.
-
----
-
-# 📝 Evidence / Reproduction
-
-The Linux/Wine issue documented here was reproduced by observing all of the following:
-
-1. The switch was reachable through its HTTP management interface.
-2. The switch responded to UDP discovery packets.
-3. Network capture showed the switch's UDP response arriving at the Linux host.
-4. The Java application used an IPv6 socket with an IPv4-mapped address.
-5. A normal IPv4 Java `DatagramSocket` could receive the response.
-6. The TP-Link utility failed to discover the switch without the IPv4 option.
-7. Launching the same utility with:
-
-```text
--Djava.net.preferIPv4Stack=true
-```
-
-caused the switch to be discovered immediately.
-
-This provides a reproducible explanation for the Linux/Wine case rather than simply assuming that IPv4 is required.
+The IPv4 JVM option should therefore be considered a **targeted workaround**, not a universal requirement for every TP-Link switch.
 
 ---
 
 # ⚖️ Legal / Clean-Room Note
 
-This repository does not distribute modified TP-Link software.
+This repository does **not** distribute modified TP-Link software.
 
-It provides:
+It contains:
 
 * troubleshooting information
-* configuration guidance
 * networking diagnostics
+* configuration guidance
 * a Java runtime startup option
-* documentation of observed network behavior
+* documentation of observed behavior
 
-TP-Link software, trademarks and proprietary implementations remain the property of their respective owners.
+TP-Link software and trademarks remain the property of their respective owners.
 
-No TP-Link executable or proprietary binary is included in this repository.
+No TP-Link executable or proprietary binary is distributed by this repository.
 
 ---
 
@@ -620,13 +744,13 @@ No TP-Link executable or proprietary binary is included in this repository.
 
 Found another TP-Link switch or utility version with the same problem?
 
-Contributions and additional test results are welcome.
+Pull requests and additional test results are welcome.
 
-When reporting an issue, please include:
+When opening an issue, please include:
 
 ```text
 Operating system:
-Distribution / Windows version:
+Linux distribution / Windows version:
 Wine version:
 Java version:
 TP-Link Utility version:
@@ -635,45 +759,56 @@ Hardware revision:
 Firmware:
 Network interface:
 VPN / virtual adapters:
-Does ping work?:
-Does web management work?:
-Does tcpdump show the UDP response?:
+Ping works:
+Web management works:
+UDP response visible:
 ```
 
-Please do not post:
+<details>
+<summary>🔒 Please remove sensitive information</summary>
+
+Do not post:
 
 * passwords
-* private credentials
+* credentials
 * public IP addresses
+* private keys
 * sensitive network information
-* complete packet captures containing sensitive data
+* unredacted packet captures
+
+</details>
 
 ---
 
 # ⭐ If This Helped
 
-If this fixed your TP-Link switch discovery problem:
+If this repository solved your discovery problem:
 
 **⭐ Star the repository**
 
-and consider opening an issue with your:
+and consider opening an issue with your test results.
 
-* switch model
-* utility version
-* operating system
-* results
-
-Additional reports can help determine how widespread the discovery/interface issue is.
+Additional reports can help establish which TP-Link utility versions, Java versions, Wine versions and switch revisions are affected.
 
 ---
 
 <div align="center">
 
-### TP-Link Easy Smart Switches + Linux/Wine
+## TP-Link Easy Smart + Linux/Wine
 
-**Reachable doesn't always mean discoverable.**
+### Reachable doesn't always mean discoverable.
 
-`IPv4 UDP Broadcast` → `Java/Wine` → `Easy Smart Utility`
+```text
+IPv4 UDP Broadcast
+        ↓
+Java Socket
+        ↓
+TP-Link Easy Smart Utility
+        ↓
+      Switch
+```
+
+**Made for easier troubleshooting.**
 
 </div>
 
@@ -702,8 +837,4 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
-```
-
-**Note:** I deliberately kept the Windows section cautious: the **IPv4-mapped socket failure was actually reproduced under Wine**, while for Windows we can document the same JVM option as something to test rather than claiming the identical bug is proven there.
 ```
