@@ -5,6 +5,8 @@
 
 # 🔧 TP-Link Easy Smart IPv4 Discovery Fix
 
+[![Vibe Coded](https://img.shields.io/badge/Vibe_Coded-✨-8A2BE2?style=for-the-badge)](https://github.com)
+
 ### Fix TP-Link Easy Smart Switch discovery problems
 
 [![Linux](https://img.shields.io/badge/Linux-Wine-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://www.winehq.org/)
